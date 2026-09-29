@@ -1,0 +1,52 @@
+# dsh-llm-pi-ai-live bundle patch.
+#
+# Mounts the live-catalog refresher. It discovers every *configured* route from
+# the harness itself — the settings namespace is the profile entry id, which is
+# why no namespace appears here — and refreshes the ones whose endpoint and
+# protocol it can read.
+#
+# Every config field is optional; the defaults below are what the plugin uses
+# when the field is omitted, and are written out so they are discoverable.
+#
+# Behaviour, in one paragraph: shortly after boot, and then on a fixed period,
+# each eligible route is asked what models it currently serves. The user's own
+# entries are carried through untouched, in order; only ids the route does not
+# list yet are appended, with contextWindow/maxTokens/input filled in from the
+# installed pi-ai catalog where it knows the model. Nothing is ever removed or
+# rewritten. A route that cannot be read, reached, or validated is left exactly
+# as it was.
+
+- insert:
+    - id: llm-pi-ai-live
+      name: 'dsh-llm-pi-ai-live'
+      config:
+        # Master switch. `false` loads the plugin but schedules nothing.
+        enabled: true
+        # First pass, ten seconds after mount — long enough that the rest of
+        # the composition has settled. `0` runs it immediately; the startup
+        # pass always runs.
+        startupDelayMs: 10000
+        # Then every six hours. `0` disables the periodic pass, leaving the
+        # startup pass and the manual tool.
+        intervalMs: 21600000
+        # Per-request network timeout.
+        timeoutMs: 30000
+        # Namespaces to serve. Empty auto-detects the pi-ai adapter's namespace
+        # from the harness's own configurable-provider directory; list entry ids
+        # here (for example `include:llm-pi-ai`) to pin it.
+        settingsNamespaces: []
+        # Provider routes to refresh; empty means every configured route.
+        include: []
+        # Provider routes to leave alone, e.g. ['openrouter'].
+        exclude: []
+        # Fill name/contextWindow/maxTokens/input on new entries from the
+        # installed pi-ai catalog. Turn off to record only what the endpoint
+        # itself disclosed.
+        enrichFromCatalog: true
+        # Hard cap on stored model entries per route.
+        maxModels: 2000
+        # Compute and report without writing — set `true` for a first look at
+        # what the plugin would change, then set it back.
+        dryRun: false
+        # Register the `refresh_model_catalog` tool for on-demand refreshes.
+        toolEnabled: true

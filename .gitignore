@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+.npm-cache/
+
+# End-to-end scratch home (scripts/e2e.mjs builds it on every run)
+.e2e/
+
+# Editor / OS noise
+.DS_Store
+*.log
+
+# NOTE: `lib/` is deliberately committed.
+#
+# This package is distributed as a git repository — `dsh plugin --profile <p>
+# add github:<owner>/<repo>` — and a git install gets a production dependency
+# tree with no TypeScript. Committing the build output is what makes the
+# install work without a build step. Run `npm run build` before committing a
+# source change.
