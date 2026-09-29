@@ -95,7 +95,50 @@ export interface Config {
   dryRun: boolean
   /** Whether to register the manual refresh tool. */
   toolEnabled: boolean
+  /** Whether and how to declare reasoning for models that have none. */
+  reasoning: ReasoningConfig
 }
+
+/**
+ * Reasoning-effort declarations for third-party models.
+ *
+ * A model that declares no `reasoningEfforts` and has no installed-catalog
+ * entry offers no thinking level at all — measured against a real boot, it
+ * resolves to `reasoning: null`. These rules fill that in.
+ */
+export interface ReasoningConfig {
+  /** Master switch; `false` (the default) leaves every entry as written. */
+  enabled: boolean
+  /** Rules in order; the first whose globs match decides the declaration. */
+  rules: {
+    /** Glob against the provider route key; `*` matches every route. */
+    provider: string
+    /** Glob against the model id; `*` matches every model. */
+    model: string
+    /** `false`, or offered level → wire spelling (null only for `off`). */
+    efforts: false | Record<string, string | null>
+  }[]
+}
+
+/**
+ * One reasoning declaration, as a settings form.
+ *
+ * The levels are named fields rather than a free-form map so the settings page
+ * renders one input per level and a mistyped level is refused by the schema
+ * instead of silently offering nothing.
+ */
+const effortsSchema = z.union([
+  z.const(false),
+  z.object({
+    off: z.union([z.string(), z.const(null)]),
+    minimal: z.string(),
+    low: z.string(),
+    medium: z.string(),
+    high: z.string(),
+    xhigh: z.string(),
+    max: z.string(),
+  }),
+])
 
 /** The plugin configuration schema. */
 export const Config = z.object({
@@ -110,6 +153,20 @@ export const Config = z.object({
   maxModels: z.natural().min(1).max(10_000).default(2000),
   dryRun: z.boolean().default(false),
   toolEnabled: z.boolean().default(true),
+  reasoning: z
+    .object({
+      enabled: z.boolean().default(false),
+      rules: z
+        .array(
+          z.object({
+            provider: z.string().default('*'),
+            model: z.string().default('*'),
+            efforts: effortsSchema,
+          }),
+        )
+        .default([]),
+    })
+    .default({ enabled: false, rules: [] }),
 })
 
 /** The manual refresh tool's name. */
@@ -169,6 +226,7 @@ function manualTool(
                 provider: { type: 'string' },
                 status: { type: 'string' },
                 added: { type: 'array', items: { type: 'string' } },
+                reasoned: { type: 'integer' },
                 reason: { type: 'string' },
                 detail: { type: 'string' },
               },
@@ -182,11 +240,19 @@ function manualTool(
         const lines = [summarize(report)]
         for (const route of report.routes) {
           if (route.status === 'updated') {
-            lines.push(
-              route.reason === 'DRY_RUN'
-                ? `- ${route.provider}: would add ${route.added.join(', ')} (dry run)`
-                : `- ${route.provider}: +${String(route.added.length)} → ${route.added.join(', ')}`,
-            )
+            const head =
+              route.added.length > 0
+                ? route.reason === 'DRY_RUN'
+                  ? `would add ${route.added.join(', ')} (dry run)`
+                  : `+${String(route.added.length)} → ${route.added.join(', ')}`
+                : 'no new models'
+            lines.push(`- ${route.provider}: ${head}`)
+            for (const entry of route.reasoned) {
+              const levels = entry.levels === 'non-reasoning' ? 'declared non-reasoning' : entry.levels.join('/')
+              lines.push(
+                `    reasoning for ${entry.id}: ${levels}${route.reason === 'DRY_RUN' ? ' (dry run)' : ''}`,
+              )
+            }
           } else if (route.status === 'failed') {
             lines.push(`- ${route.provider}: failed (${route.reason ?? 'UNKNOWN'}) ${route.detail ?? ''}`.trim())
           }
@@ -244,6 +310,7 @@ export function apply(ctx: PluginContext, config: Config): void {
     settingsNamespaces: config.settingsNamespaces,
     include,
     exclude: config.exclude,
+    reasoning: config.reasoning,
   })
 
   let running = false

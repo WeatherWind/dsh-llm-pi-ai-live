@@ -109,6 +109,46 @@ Every field is optional; defaults are documented in [`cordis.patch.yml`](cordis.
 | `dryRun` | `false` | Compute and report without writing |
 | `toolEnabled` | `true` | Register the `refresh_model_catalog` tool |
 
+## Declaring reasoning effort for third-party models
+
+**The gap, measured.** A route pi-ai's catalog does not describe has to declare everything itself,
+and `reasoningEfforts` is the one field with no sensible default. Against a real DSH boot:
+
+| Third-party model | `resolveModelInfo().reasoning` |
+|---|---|
+| declares no `reasoningEfforts` | **`null`** — no thinking level is offered at all |
+| declares `reasoningEfforts` | `{efforts: [off, high, max]}` ✓ |
+| declares `reasoningEfforts: false` | `null` (correctly declared non-reasoning) |
+
+Writing the map by hand works, but every new model needs it written again. This automates that
+without guessing:
+
+```yaml
+reasoning:
+  enabled: true
+  rules:
+    - provider: 'acme-gateway'   # glob against the route key
+      model: 'glm-*'             # glob against the model id
+      efforts:
+        off: null                # null is allowed only for `off`
+        high: high
+        max: ultra               # rename a level for this gateway
+    - provider: 'local-vllm'
+      model: '*'
+      efforts: false             # declare them non-reasoning
+```
+
+**Only a genuine gap is filled**, on two rules:
+
+- An entry that **already declares** `reasoningEfforts` — including `false`, which is a deliberate
+  statement that the model does not reason — is never touched.
+- A model the **installed catalog knows** is never touched either: leaving the field absent inherits
+  the catalog entry's capability, so nothing is missing.
+
+**Nothing is inferred from a model's name.** The levels and their wire spellings are the operator's
+statement about their own gateway, and a wrong guess changes the request shape. A rule with a
+mistyped level is refused and **named by index in the log**, rather than failing silently.
+
 ## Tool
 
 `refresh_model_catalog` — optional `provider` narrows the pass to one route. Lets the agent pick up a

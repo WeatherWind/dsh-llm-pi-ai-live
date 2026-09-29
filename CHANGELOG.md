@@ -6,6 +6,21 @@ All notable changes to this plugin are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Reasoning-effort declarations for third-party models** (`reasoning` config block). A route
+  pi-ai's catalog does not describe offers no thinking level at all until something declares one:
+  measured against a real boot, such a model resolves to `reasoning: null`, so no selector can
+  offer a level and the model never thinks. Rules now fill that in, matched by provider and model
+  globs.
+  - An entry that already declares `reasoningEfforts` — including `false` — is never touched.
+  - A model the installed catalog knows is never touched: an absent field inherits the catalog
+    entry's capability, so it is not missing anything.
+  - Nothing is inferred from a model's name; levels and wire spellings come from the operator,
+    because the spelling is a property of the endpoint that no listing discloses.
+  - A mistyped level is refused and named by index in the log rather than failing silently.
+  - Off by default, because writing the field changes the request shape.
+
 ### Changed
 
 - **Renamed** `dsh-llm-pi-ai-live-catalog` to **`dsh-llm-pi-ai-live`** (package, plugin name,

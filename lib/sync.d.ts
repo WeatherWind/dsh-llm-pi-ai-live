@@ -16,6 +16,7 @@
  * @module dsh-llm-pi-ai-live/sync
  */
 import type { BuiltinCatalog } from './builtin.js';
+import type { ReasoningApplication, ReasoningPolicy } from './reasoning.js';
 import type { CredentialsSeam, LlmSeam, Logger, SettingsSeam } from './types.js';
 /** The policy one pass runs under. */
 export interface SyncPolicy {
@@ -33,6 +34,8 @@ export interface SyncPolicy {
     include: readonly string[];
     /** Provider routes to exclude. */
     exclude: readonly string[];
+    /** Whether and how to declare reasoning for models that have none. */
+    reasoning: ReasoningPolicy;
 }
 /** Everything one pass needs from the host. */
 export interface SyncDeps {
@@ -53,6 +56,8 @@ export interface RouteOutcome {
     status: 'updated' | 'unchanged' | 'skipped' | 'failed';
     /** Ids appended by this pass. */
     added: string[];
+    /** Models this pass declared reasoning for. */
+    reasoned: ReasoningApplication[];
     /** Entries the user already had. */
     kept: number;
     /** Models the endpoint advertised, when it answered. */

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Config, TOOL_NAME, apply, inject } from '../src/index.js'
+import { compileRules } from '../src/reasoning.js'
 import type { Config as PluginConfig } from '../src/index.js'
 import type { SettingsDescriptor, SettingsPathOp, SettingsSeam, ToolDefinition } from '../src/types.js'
 
@@ -116,6 +117,7 @@ const config = (overrides: Partial<PluginConfig> = {}): PluginConfig => ({
   maxModels: 100,
   dryRun: false,
   toolEnabled: true,
+  reasoning: { enabled: false, rules: [] },
   ...overrides,
 })
 
@@ -144,6 +146,36 @@ describe('Config schema', () => {
 
   it('rejects a nonsensical timeout', () => {
     expect(() => Config({ timeoutMs: 10 })).toThrow()
+  })
+
+  it('defaults reasoning off, and carries a rule through the form', () => {
+    const off = Config({}) as PluginConfig
+    expect(off.reasoning).toEqual({ enabled: false, rules: [] })
+
+    const on = Config({
+      reasoning: {
+        enabled: true,
+        rules: [
+          { provider: 'acme-gateway', model: 'glm-*', efforts: { off: null, high: 'high', max: 'ultra' } },
+          { provider: 'local', model: '*', efforts: false },
+        ],
+      },
+    }) as PluginConfig
+    expect(on.reasoning.enabled).toBe(true)
+    expect(on.reasoning.rules[0]!.efforts).toEqual({ off: null, high: 'high', max: 'ultra' })
+    expect(on.reasoning.rules[1]!.efforts).toBe(false)
+    expect(compileRules(on.reasoning).invalid).toHaveLength(0)
+  })
+
+  it('lets a mistyped level through the form but refuses it at compile time', () => {
+    // schemastery drops unknown keys rather than rejecting them, so the named
+    // level fields are a UI affordance; compileRules is the enforcement.
+    const typo = Config({
+      reasoning: { enabled: true, rules: [{ provider: '*', model: '*', efforts: { bogus: 'x' } }] },
+    }) as PluginConfig
+    const compiled = compileRules(typo.reasoning)
+    expect(compiled.rules).toHaveLength(0)
+    expect(compiled.invalid[0]!.index).toBe(0)
   })
 })
 

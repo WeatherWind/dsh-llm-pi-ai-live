@@ -50,3 +50,30 @@
         dryRun: false
         # Register the `refresh_model_catalog` tool for on-demand refreshes.
         toolEnabled: true
+        # Declare reasoning efforts for third-party models that have none.
+        # A route pi-ai's catalog does not describe offers no thinking level at
+        # all until something declares one; measured against a real boot, such
+        # a model resolves to `reasoning: null`. Off by default because writing
+        # the field changes the request shape, and nothing here is ever
+        # inferred from a model's name — the levels and their wire spellings
+        # are the operator's statement about their own gateway.
+        #
+        # An entry that already declares `reasoningEfforts` (including
+        # `false`) and a model the installed catalog knows are both left
+        # alone; only a genuine gap is filled.
+        reasoning:
+          enabled: false
+          rules: []
+          # Example: every model on one hand-declared gateway reasons, with
+          # `off` sending nothing and `high`/`max` spelled for that gateway.
+          #
+          # rules:
+          #   - provider: acme-gateway      # glob against the route key
+          #     model: 'glm-*'              # glob against the model id
+          #     efforts:
+          #       off: null                 # null is allowed only for `off`
+          #       high: high
+          #       max: ultra                # rename a level for this gateway
+          #   - provider: local-vllm
+          #     model: '*'
+          #     efforts: false              # declare them non-reasoning

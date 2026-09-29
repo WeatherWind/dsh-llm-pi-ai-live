@@ -88,6 +88,7 @@ describeIf('opencode-go configured with only a credential (#3816)', () => {
     settingsNamespaces: [],
     include: [],
     exclude: [],
+    reasoning: { enabled: false, rules: [] },
   }
 
   it('is planned rather than skipped as endpoint-less, and appends the live models', async () => {

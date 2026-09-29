@@ -99,6 +99,44 @@ dsh plugin --profile <profile> add link:$PWD
 | `dryRun` | `false` | 只计算并报告，不写入 |
 | `toolEnabled` | `true` | 是否注册 `refresh_model_catalog` 工具 |
 
+## 给第三方模型补 reasoning effort
+
+**先说清现状**：`llm-pi-ai` 的路由如果不在 pi-ai catalog 里，它的一切都得自己声明，而
+`reasoningEfforts` 是唯一没有合理默认值的字段。对真实 DSH 的实测：
+
+| 第三方模型 | `resolveModelInfo().reasoning` |
+|---|---|
+| 没有 `reasoningEfforts` | **`null`** —— 模型不提供任何思考等级，选择器里也没有 |
+| 声明了 `reasoningEfforts` | `{efforts: [off, high, max]}` ✓ |
+| `reasoningEfforts: false` | `null`（正确地声明为不推理） |
+
+也就是说：**手工写一张 map 能用，但每加一个模型都要再写一遍。** 这个功能把那件事自动化，
+且不猜：
+
+```yaml
+reasoning:
+  enabled: true
+  rules:
+    - provider: 'acme-gateway'   # 对路由名做 glob
+      model: 'glm-*'             # 对模型 id 做 glob
+      efforts:
+        off: null                # 只有 off 允许为 null
+        high: high
+        max: ultra               # 给这个网关重命名一个等级
+    - provider: 'local-vllm'
+      model: '*'
+      efforts: false             # 声明为不推理
+```
+
+**只补真正的缺口**，两条铁律：
+
+- 条目**已经声明了** `reasoningEfforts`（包括 `false`——那是"这个模型不推理"的明确表态）→ 绝不触碰。
+- 模型**已安装 catalog 认识** → 绝不触碰，因为字段留空本来就会继承 catalog 的能力，它并不缺东西。
+
+**绝不从模型名推断能力。** 等级和它的线上拼写是运营者对自己网关的陈述，不是插件能猜的东西——
+猜错会直接改变请求形状。所以规则写了才生效，没匹配到就什么都不做。
+规则里出现拼错的等级名会被拒绝并**在日志里点名是第几条规则**，而不是静默失效。
+
 ## 工具
 
 `refresh_model_catalog`（可选参数 `provider`：只刷新某一条路由）——让 agent 在 provider 发布新模型后

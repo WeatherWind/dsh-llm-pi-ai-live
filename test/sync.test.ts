@@ -64,6 +64,7 @@ const policy = (overrides: Partial<SyncPolicy> = {}): SyncPolicy => ({
   settingsNamespaces: [],
   include: [],
   exclude: [],
+  reasoning: { enabled: false, rules: [] },
   ...overrides,
 })
 
@@ -301,6 +302,130 @@ describe('createSyncEngine', () => {
     const report = await engine.refresh('test')
     expect(report.routes).toHaveLength(0)
     expect(report.updated).toBe(0)
+  })
+})
+
+describe('reasoning declarations', () => {
+  /** A route pi-ai's catalog does not describe. */
+  const thirdParty = (extra: Record<string, unknown> = {}): Record<string, unknown> => ({
+    api: 'openai-completions',
+    baseURL: 'https://gateway.example/v1',
+    ...extra,
+  })
+
+  const entry = (provider: string): LlmConfigurableProvider => ({
+    provider,
+    displayName: provider,
+    settingsNs: 'include:llm-pi-ai',
+    settingsPath: ['providers', provider],
+    declared: true,
+  })
+
+  const reasoning = (
+    rules: { provider: string; model: string; efforts: false | Record<string, string | null> }[],
+  ) => ({ enabled: true, rules })
+
+  it('declares reasoning in the same write that appends the model', async () => {
+    const host = makeHost({
+      value: { providers: { 'acme-gateway': thirdParty() } },
+      entries: [entry('acme-gateway')],
+    })
+    const engine = createSyncEngine({
+      llm: { listConfigurableProviders: () => host.entries },
+      settings: host.settings,
+      logger: silent,
+      policy: policy({
+        reasoning: reasoning([{ provider: 'acme-gateway', model: '*', efforts: { off: null, high: 'high' } }]),
+      }),
+      fetch: okFetch({ data: [{ id: 'acme-think' }] }),
+    })
+
+    const report = await engine.refresh('test')
+    expect(report.routes[0]!.reasoned).toEqual([{ id: 'acme-think', levels: ['off', 'high'], rule: 0 }])
+    const written = host.writes[0]!.ops[0]!
+    if (written.op !== 'set') throw new Error('expected a set')
+    expect(written.value).toEqual([{ id: 'acme-think', reasoningEfforts: { off: null, high: 'high' } }])
+  })
+
+  it('writes even when no model was appended, because reasoning still changed', async () => {
+    const host = makeHost({
+      value: { providers: { 'acme-gateway': thirdParty({ models: [{ id: 'existing' }] }) } },
+      entries: [entry('acme-gateway')],
+    })
+    const engine = createSyncEngine({
+      llm: { listConfigurableProviders: () => host.entries },
+      settings: host.settings,
+      logger: silent,
+      policy: policy({ reasoning: reasoning([{ provider: '*', model: '*', efforts: { high: 'high' } }]) }),
+      fetch: okFetch({ data: [{ id: 'existing' }] }),
+    })
+
+    const report = await engine.refresh('test')
+    expect(report.routes[0]).toMatchObject({ status: 'updated', added: [] })
+    expect(report.routes[0]!.reasoned).toHaveLength(1)
+    expect(host.writes).toHaveLength(1)
+  })
+
+  it('is inert while disabled', async () => {
+    const host = makeHost({
+      value: { providers: { 'acme-gateway': thirdParty() } },
+      entries: [entry('acme-gateway')],
+    })
+    const engine = createSyncEngine({
+      llm: { listConfigurableProviders: () => host.entries },
+      settings: host.settings,
+      logger: silent,
+      policy: policy({
+        reasoning: { enabled: false, rules: [{ provider: '*', model: '*', efforts: { high: 'high' } }] },
+      }),
+      fetch: okFetch({ data: [{ id: 'acme-think' }] }),
+    })
+
+    await engine.refresh('test')
+    const written = host.writes[0]!.ops[0]!
+    if (written.op !== 'set') throw new Error('expected a set')
+    expect(written.value).toEqual([{ id: 'acme-think' }])
+  })
+
+  it('never touches a model the installed catalog knows', async () => {
+    const host = makeHost({
+      value: { providers: { 'acme-gateway': thirdParty() } },
+      entries: [entry('acme-gateway')],
+    })
+    const engine = createSyncEngine({
+      llm: { listConfigurableProviders: () => host.entries },
+      settings: host.settings,
+      logger: silent,
+      policy: policy({ reasoning: reasoning([{ provider: '*', model: '*', efforts: { high: 'high' } }]) }),
+      fetch: okFetch({ data: [{ id: 'known-model' }] }),
+      catalog: catalog({ model: (provider, id) => (id === 'known-model' ? { id, contextWindow: 1000 } : undefined) }),
+    })
+
+    const report = await engine.refresh('test')
+    expect(report.routes[0]!.reasoned).toHaveLength(0)
+    const written = host.writes[0]!.ops[0]!
+    if (written.op !== 'set') throw new Error('expected a set')
+    expect(written.value).toEqual([{ id: 'known-model', contextWindow: 1000 }])
+  })
+
+  it('warns about a rule it had to refuse', async () => {
+    const host = makeHost({
+      value: { providers: { 'acme-gateway': thirdParty() } },
+      entries: [entry('acme-gateway')],
+    })
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
+    const engine = createSyncEngine({
+      llm: { listConfigurableProviders: () => host.entries },
+      settings: host.settings,
+      logger,
+      policy: policy({
+        reasoning: reasoning([{ provider: '*', model: '*', efforts: { bogus: 'x' } as never }]),
+      }),
+      fetch: okFetch({ data: [{ id: 'acme-think' }] }),
+    })
+
+    await engine.refresh('test')
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('reasoning rule #0 was refused'))
   })
 })
 

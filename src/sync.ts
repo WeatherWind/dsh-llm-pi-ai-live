@@ -19,6 +19,8 @@
 import type { BuiltinCatalog } from './builtin.js'
 import { listModels } from './listing.js'
 import { mergeAppendOnly } from './merge.js'
+import { applyReasoning, compileRules } from './reasoning.js'
+import type { ReasoningApplication, ReasoningPolicy } from './reasoning.js'
 import { planRoutes } from './routes.js'
 import type { PlannedRoute } from './routes.js'
 import type { CredentialsSeam, LlmSeam, Logger, SettingsSeam } from './types.js'
@@ -39,6 +41,8 @@ export interface SyncPolicy {
   include: readonly string[]
   /** Provider routes to exclude. */
   exclude: readonly string[]
+  /** Whether and how to declare reasoning for models that have none. */
+  reasoning: ReasoningPolicy
 }
 
 /** Everything one pass needs from the host. */
@@ -61,6 +65,8 @@ export interface RouteOutcome {
   status: 'updated' | 'unchanged' | 'skipped' | 'failed'
   /** Ids appended by this pass. */
   added: string[]
+  /** Models this pass declared reasoning for. */
+  reasoned: ReasoningApplication[]
   /** Entries the user already had. */
   kept: number
   /** Models the endpoint advertised, when it answered. */
@@ -212,6 +218,13 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
       }
     }
 
+    const reasoningRules = compileRules(deps.policy.reasoning)
+    for (const refused of reasoningRules.invalid) {
+      deps.logger.warn(
+        `[live-catalog] reasoning rule #${String(refused.index)} was refused: ${refused.detail}`,
+      )
+    }
+
     const plan = planRoutes({
       entries,
       descriptors,
@@ -226,6 +239,7 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
         provider: skipped.provider,
         status: 'skipped',
         added: [],
+        reasoned: [],
         kept: 0,
         reason: skipped.reason,
         detail: skipped.detail,
@@ -245,6 +259,7 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
       const base: Omit<RouteOutcome, 'status' | 'durationMs'> = {
         provider: route.provider,
         added: [],
+        reasoned: [],
         kept: 0,
       }
       if (signal?.aborted === true) {
@@ -298,7 +313,22 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
         continue
       }
 
-      if (!merged.changed) {
+      // Reasoning runs on the merged list, so a model appended by this pass can
+      // be declared in the same write rather than needing a second one. It only
+      // ever adds a field to an entry that has none; see reasoning.ts.
+      let models = merged.models
+      let reasoned: ReasoningApplication[] = []
+      if (deps.policy.reasoning.enabled && reasoningRules.rules.length > 0) {
+        const outcome = applyReasoning(models, reasoningRules.rules, {
+          provider: route.provider,
+          catalogKnown: (id) => deps.catalog?.model(route.provider, id) !== undefined,
+        })
+        models = outcome.models
+        reasoned = outcome.applied
+      }
+      const changed = merged.changed || reasoned.length > 0
+
+      if (!changed) {
         outcomes.push({
           ...base,
           status: 'unchanged',
@@ -314,6 +344,7 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
           ...base,
           status: 'updated',
           added: merged.added,
+          reasoned,
           kept: merged.kept,
           advertised: listing.models.length,
           reason: 'DRY_RUN',
@@ -323,7 +354,7 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
         continue
       }
 
-      const failure = await writeModels(deps, route, merged.models)
+      const failure = await writeModels(deps, route, models)
       if (failure !== undefined) {
         outcomes.push({
           ...base,
@@ -340,6 +371,7 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
         ...base,
         status: 'updated',
         added: merged.added,
+        reasoned,
         kept: merged.kept,
         advertised: listing.models.length,
         ...(merged.truncated ? { detail: `capped at ${String(deps.policy.maxModels)} models` } : {}),
@@ -359,16 +391,24 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
     }
 
     for (const outcome of report.routes) {
+      const reasoningLine =
+        outcome.reasoned.length === 0
+          ? ''
+          : `; reasoning declared for ${String(outcome.reasoned.length)}: ` +
+            outcome.reasoned
+              .map((entry) => `${entry.id}=${entry.levels === 'non-reasoning' ? 'none' : entry.levels.join('/')}`)
+              .join(', ')
       if (outcome.status === 'updated' && outcome.reason === 'DRY_RUN') {
         // A dry run that reported nothing would be useless: the whole point of
         // the mode is to see what a real pass would change.
         deps.logger.info(
           `[live-catalog] ${outcome.provider}: dry run — would add ${String(outcome.added.length)} model(s): ` +
-            `${outcome.added.join(', ')}`,
+            `${outcome.added.join(', ')}${reasoningLine}`,
         )
       } else if (outcome.status === 'updated') {
         deps.logger.info(
-          `[live-catalog] ${outcome.provider}: +${String(outcome.added.length)} model(s) — ${outcome.added.join(', ')}`,
+          `[live-catalog] ${outcome.provider}: +${String(outcome.added.length)} model(s) — ` +
+            `${outcome.added.join(', ')}${reasoningLine}`,
         )
       } else if (outcome.status === 'failed') {
         deps.logger.warn(
@@ -393,11 +433,13 @@ export function createSyncEngine(deps: SyncDeps): SyncEngine {
  * @returns the rendered line.
  */
 export function summarize(report: SyncReport): string {
+  const reasoned = report.routes.reduce((total, route) => total + route.reasoned.length, 0)
   const parts = [
     `${String(report.routes.length)} route(s) examined`,
     `${String(report.updated)} updated`,
     `${String(report.added)} model(s) added`,
   ]
+  if (reasoned > 0) parts.push(`${String(reasoned)} reasoning declaration(s) written`)
   if (report.failed > 0) parts.push(`${String(report.failed)} failed`)
   return parts.join(', ')
 }

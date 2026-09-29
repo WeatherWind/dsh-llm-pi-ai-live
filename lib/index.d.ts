@@ -76,6 +76,28 @@ export interface Config {
     dryRun: boolean;
     /** Whether to register the manual refresh tool. */
     toolEnabled: boolean;
+    /** Whether and how to declare reasoning for models that have none. */
+    reasoning: ReasoningConfig;
+}
+/**
+ * Reasoning-effort declarations for third-party models.
+ *
+ * A model that declares no `reasoningEfforts` and has no installed-catalog
+ * entry offers no thinking level at all — measured against a real boot, it
+ * resolves to `reasoning: null`. These rules fill that in.
+ */
+export interface ReasoningConfig {
+    /** Master switch; `false` (the default) leaves every entry as written. */
+    enabled: boolean;
+    /** Rules in order; the first whose globs match decides the declaration. */
+    rules: {
+        /** Glob against the provider route key; `*` matches every route. */
+        provider: string;
+        /** Glob against the model id; `*` matches every model. */
+        model: string;
+        /** `false`, or offered level → wire spelling (null only for `off`). */
+        efforts: false | Record<string, string | null>;
+    }[];
 }
 /** The plugin configuration schema. */
 export declare const Config: z<Schemastery.ObjectS<NoInfer<{
@@ -90,6 +112,77 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     maxModels: z<number, number, "defined">;
     dryRun: z<boolean, boolean, "defined">;
     toolEnabled: z<boolean, boolean, "defined">;
+    reasoning: z<Schemastery.ObjectS<NoInfer<{
+        enabled: z<boolean, boolean, "defined">;
+        rules: z<({
+            provider?: string | null | undefined;
+            model?: string | null | undefined;
+            efforts?: false | ({
+                off?: string | null | undefined;
+                minimal?: string | null | undefined;
+                low?: string | null | undefined;
+                medium?: string | null | undefined;
+                high?: string | null | undefined;
+                xhigh?: string | null | undefined;
+                max?: string | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict)[], Schemastery.ObjectT<NoInfer<{
+            provider: z<string, string, "defined">;
+            model: z<string, string, "defined">;
+            efforts: z<false | ({
+                off?: string | null | undefined;
+                minimal?: string | null | undefined;
+                low?: string | null | undefined;
+                medium?: string | null | undefined;
+                high?: string | null | undefined;
+                xhigh?: string | null | undefined;
+                max?: string | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict), false | Schemastery.ObjectT<NoInfer<{
+                off: z<string | null, string | null, "plain">;
+                minimal: z<string, string, "plain">;
+                low: z<string, string, "plain">;
+                medium: z<string, string, "plain">;
+                high: z<string, string, "plain">;
+                xhigh: z<string, string, "plain">;
+                max: z<string, string, "plain">;
+            }>>, "plain">;
+        }>>[], "defined">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        enabled: z<boolean, boolean, "defined">;
+        rules: z<({
+            provider?: string | null | undefined;
+            model?: string | null | undefined;
+            efforts?: false | ({
+                off?: string | null | undefined;
+                minimal?: string | null | undefined;
+                low?: string | null | undefined;
+                medium?: string | null | undefined;
+                high?: string | null | undefined;
+                xhigh?: string | null | undefined;
+                max?: string | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict)[], Schemastery.ObjectT<NoInfer<{
+            provider: z<string, string, "defined">;
+            model: z<string, string, "defined">;
+            efforts: z<false | ({
+                off?: string | null | undefined;
+                minimal?: string | null | undefined;
+                low?: string | null | undefined;
+                medium?: string | null | undefined;
+                high?: string | null | undefined;
+                xhigh?: string | null | undefined;
+                max?: string | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict), false | Schemastery.ObjectT<NoInfer<{
+                off: z<string | null, string | null, "plain">;
+                minimal: z<string, string, "plain">;
+                low: z<string, string, "plain">;
+                medium: z<string, string, "plain">;
+                high: z<string, string, "plain">;
+                xhigh: z<string, string, "plain">;
+                max: z<string, string, "plain">;
+            }>>, "plain">;
+        }>>[], "defined">;
+    }>>, "defined">;
 }>>, Schemastery.ObjectT<NoInfer<{
     enabled: z<boolean, boolean, "defined">;
     startupDelayMs: z<number, number, "defined">;
@@ -102,6 +195,77 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
     maxModels: z<number, number, "defined">;
     dryRun: z<boolean, boolean, "defined">;
     toolEnabled: z<boolean, boolean, "defined">;
+    reasoning: z<Schemastery.ObjectS<NoInfer<{
+        enabled: z<boolean, boolean, "defined">;
+        rules: z<({
+            provider?: string | null | undefined;
+            model?: string | null | undefined;
+            efforts?: false | ({
+                off?: string | null | undefined;
+                minimal?: string | null | undefined;
+                low?: string | null | undefined;
+                medium?: string | null | undefined;
+                high?: string | null | undefined;
+                xhigh?: string | null | undefined;
+                max?: string | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict)[], Schemastery.ObjectT<NoInfer<{
+            provider: z<string, string, "defined">;
+            model: z<string, string, "defined">;
+            efforts: z<false | ({
+                off?: string | null | undefined;
+                minimal?: string | null | undefined;
+                low?: string | null | undefined;
+                medium?: string | null | undefined;
+                high?: string | null | undefined;
+                xhigh?: string | null | undefined;
+                max?: string | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict), false | Schemastery.ObjectT<NoInfer<{
+                off: z<string | null, string | null, "plain">;
+                minimal: z<string, string, "plain">;
+                low: z<string, string, "plain">;
+                medium: z<string, string, "plain">;
+                high: z<string, string, "plain">;
+                xhigh: z<string, string, "plain">;
+                max: z<string, string, "plain">;
+            }>>, "plain">;
+        }>>[], "defined">;
+    }>>, Schemastery.ObjectT<NoInfer<{
+        enabled: z<boolean, boolean, "defined">;
+        rules: z<({
+            provider?: string | null | undefined;
+            model?: string | null | undefined;
+            efforts?: false | ({
+                off?: string | null | undefined;
+                minimal?: string | null | undefined;
+                low?: string | null | undefined;
+                medium?: string | null | undefined;
+                high?: string | null | undefined;
+                xhigh?: string | null | undefined;
+                max?: string | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict) | null | undefined;
+        } & import("@deepseek-ai/cosmokit").Dict)[], Schemastery.ObjectT<NoInfer<{
+            provider: z<string, string, "defined">;
+            model: z<string, string, "defined">;
+            efforts: z<false | ({
+                off?: string | null | undefined;
+                minimal?: string | null | undefined;
+                low?: string | null | undefined;
+                medium?: string | null | undefined;
+                high?: string | null | undefined;
+                xhigh?: string | null | undefined;
+                max?: string | null | undefined;
+            } & import("@deepseek-ai/cosmokit").Dict), false | Schemastery.ObjectT<NoInfer<{
+                off: z<string | null, string | null, "plain">;
+                minimal: z<string, string, "plain">;
+                low: z<string, string, "plain">;
+                medium: z<string, string, "plain">;
+                high: z<string, string, "plain">;
+                xhigh: z<string, string, "plain">;
+                max: z<string, string, "plain">;
+            }>>, "plain">;
+        }>>[], "defined">;
+    }>>, "defined">;
 }>>, "plain">;
 /** The manual refresh tool's name. */
 export declare const TOOL_NAME = "refresh_model_catalog";
